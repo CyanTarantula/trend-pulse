@@ -15,6 +15,8 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import feedparser
 import requests
+from pytrends.request import TrendReq
+
 
 # Configure Logging
 logging.basicConfig(
@@ -184,6 +186,19 @@ class TrendFetcher:
             feed = feedparser.parse(response.content)
 
             for entry in feed.entries[:20]:
+                # Extract Traffic (e.g., "50,000+")
+                traffic_str = (
+                    entry.get("ht_approx_traffic", "0")
+                    .replace(",", "")
+                    .replace("+", "")
+                )
+                try:
+                    score = int(traffic_str)
+                except ValueError:
+                    score = 0
+
+                metric_label = f"{entry.get('ht_approx_traffic', 'N/A')} Searches"
+
                 self.trends.append(
                     {
                         "date": datetime.date.today().isoformat(),
@@ -191,10 +206,41 @@ class TrendFetcher:
                         "trend": entry.title,
                         "url": f"https://trends.google.com/trends/explore?q={entry.title}",
                         "raw_text": entry.title,
+                        "trend_score": score,
+                        "metric_label": metric_label,
                     }
                 )
         except Exception as e:
             logger.error(f"Error fetching Google Trends RSS: {e}")
+
+    def fetch_pytrends(self):
+        """Fetches realtime trends using pytrends (Secondary Source)."""
+        logger.info("Fetching Google Trends (pytrends)...")
+        try:
+            pytrends = TrendReq(hl="en-US", tz=360)
+            # Try realtime first
+            realtime_trends = pytrends.realtime_trending_searches(pn="US")
+
+            # Format: DataFrame with 'title', 'entity_names'
+            if not realtime_trends.empty:
+                for _, row in realtime_trends.head(20).iterrows():
+                    title = row["title"]
+                    # Pytrends realtime doesn't always give traffic numbers easily in this call
+                    # We assign a high default score for Being Realtime
+
+                    self.trends.append(
+                        {
+                            "date": datetime.date.today().isoformat(),
+                            "source": "Google Trends (Live)",
+                            "trend": title,
+                            "url": f"https://trends.google.com/trends/explore?q={title}",
+                            "raw_text": title,
+                            "trend_score": 1000,  # Arbitrary 'Hot' score since no exact number
+                            "metric_label": "Live Trend",
+                        }
+                    )
+        except Exception as e:
+            logger.warning(f"pytrends fetch failed (expected if API changes): {e}")
 
     def fetch_rss_feeds(self):
         """Fetches from Gen Z / Culture RSS feeds."""
@@ -229,6 +275,8 @@ class TrendFetcher:
                             "trend": topic,
                             "url": entry.link,
                             "raw_text": entry.title,
+                            "trend_score": 100,  # Default logic for RSS
+                            "metric_label": "News Feature",
                         }
                     )
             except Exception as e:
@@ -258,6 +306,9 @@ class TrendFetcher:
                             pass
 
                         topic = self.extract_topic(post.get("title"))
+                        score = post.get("score", 0)
+                        comments = post.get("num_comments", 0)
+
                         self.trends.append(
                             {
                                 "date": datetime.date.today().isoformat(),
@@ -265,6 +316,8 @@ class TrendFetcher:
                                 "trend": topic,
                                 "url": f"https://reddit.com{post.get('permalink')}",
                                 "raw_text": post.get("title"),
+                                "trend_score": score,
+                                "metric_label": f"{score} Upvotes",
                             }
                         )
             else:
@@ -274,6 +327,7 @@ class TrendFetcher:
 
     def get_all_trends(self) -> List[Dict[str, Any]]:
         self.fetch_google_trends()
+        self.fetch_pytrends()
         self.fetch_rss_feeds()
         self.fetch_reddit_gen_z()
         return self.trends
@@ -365,8 +419,10 @@ class SheetWriter:
             try:
                 worksheet = self.sheet.worksheet(tab_name)
             except gspread.WorksheetNotFound:
-                worksheet = self.sheet.add_worksheet(title=tab_name, rows=1000, cols=5)
-                worksheet.append_row(["Date", "Trend", "Source", "URL", "Raw Text"])
+                worksheet = self.sheet.add_worksheet(title=tab_name, rows=1000, cols=7)
+                worksheet.append_row(
+                    ["Date", "Trend", "Source", "URL", "Raw Text", "Score", "Metric"]
+                )
 
             # 1. Read ALL existing data
             try:
@@ -377,9 +433,20 @@ class SheetWriter:
 
             if not existing_rows:
                 # Should at least have headers if newly created, but just in case
-                header = ["Date", "Trend", "Source", "URL", "Raw Text"]
+                header = [
+                    "Date",
+                    "Trend",
+                    "Source",
+                    "URL",
+                    "Raw Text",
+                    "Score",
+                    "Metric",
+                ]
             else:
                 header = existing_rows[0]
+                if len(header) < 7:
+                    # Add missing headers if updating old sheet
+                    header.extend(["Score", "Metric"])
                 existing_rows = existing_rows[1:]  # Skip header
 
             # 2. Combine and Deduplicate
@@ -416,6 +483,9 @@ class SheetWriter:
                     row[3],
                     row[4],
                 )
+                score = int(row[5]) if len(row) > 5 and row[5].isdigit() else 0
+                metric = row[6] if len(row) > 6 else ""
+
                 key = (date, normalize(trend))
                 merged_data[key] = {
                     "Date": date,
@@ -423,6 +493,8 @@ class SheetWriter:
                     "Source": source,
                     "URL": url,
                     "Raw Text": raw_text,
+                    "Score": score,
+                    "Metric": metric,
                 }
 
             # Process New
@@ -443,16 +515,26 @@ class SheetWriter:
                         "Source": t["source"],
                         "URL": t["url"],
                         "Raw Text": t["raw_text"],
+                        "Score": t.get("trend_score", 0),
+                        "Metric": t.get("metric_label", ""),
                     }
 
             # 3. Write Back
             # Convert back to list of lists
-            # Sort by Date (descending) then Trend (A-Z)
+            # Sort by Date (descending) then Trend Score (descending)
             final_rows = list(merged_data.values())
-            final_rows.sort(key=lambda x: (x["Date"], x["Trend"]), reverse=True)
+            final_rows.sort(key=lambda x: (x["Date"], x["Score"]), reverse=True)
 
             rows_to_write = [header] + [
-                [r["Date"], r["Trend"], r["Source"], r["URL"], r["Raw Text"]]
+                [
+                    r["Date"],
+                    r["Trend"],
+                    r["Source"],
+                    r["URL"],
+                    r["Raw Text"],
+                    r["Score"],
+                    r["Metric"],
+                ]
                 for r in final_rows
             ]
 

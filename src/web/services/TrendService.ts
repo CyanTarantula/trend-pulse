@@ -49,7 +49,8 @@ export class TrendService {
                 const tDate = new Date(t.date);
                 return tDate >= cutoff;
             });
-            filteredGenerations[gen] = TrendService.shuffle(filtered);
+            // Sort by Score Descending
+            filteredGenerations[gen] = filtered.sort((a, b) => (b.score || 0) - (a.score || 0));
         });
 
         return {
@@ -58,17 +59,5 @@ export class TrendService {
         };
     }
 
-    // Helper to shuffle array (Fisher-Yates)
-    static shuffle(array: any[]) {
-        let currentIndex = array.length, randomIndex;
-
-        while (currentIndex != 0) {
-            randomIndex = Math.floor(Math.random() * currentIndex);
-            currentIndex--;
-            [array[currentIndex], array[randomIndex]] = [
-                array[randomIndex], array[currentIndex]];
-        }
-
-        return array;
-    }
 }
+

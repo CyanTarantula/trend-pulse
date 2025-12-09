@@ -35,7 +35,7 @@ export async function getTrendsData() {
         const sheets = google.sheets({ version: 'v4', auth });
 
         // Fetch all tabs
-        const ranges = ["Gen Z!A2:E", "Millennials!A2:E", "Gen Alpha!A2:E", "General!A2:E"];
+        const ranges = ["Gen Z!A2:G", "Millennials!A2:G", "Gen Alpha!A2:G", "General!A2:G"];
         const response = await sheets.spreadsheets.values.batchGet({
             spreadsheetId: sheetId,
             ranges: ranges,
@@ -55,7 +55,9 @@ export async function getTrendsData() {
                 trend: row[1],
                 source: row[2],
                 url: row[3],
-                raw_text: row[4]
+                raw_text: row[4],
+                score: parseInt(row[5] || "0", 10),
+                metric: row[6] || ""
             })).reverse(); // Newest first
         });
 

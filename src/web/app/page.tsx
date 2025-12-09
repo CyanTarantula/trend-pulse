@@ -82,10 +82,17 @@ export default async function Home({
                 <SpotlightCard className="p-6 flex flex-col justify-between group hover:border-indigo-500/50 transition-colors">
                   <div>
                     <div className="flex justify-between items-start mb-4">
-                      <span className="text-xs font-mono text-indigo-400 bg-indigo-400/10 px-2 py-1 rounded">
-                        {trend.source}
-                      </span>
-                      <span className="text-xs text-neutral-500">
+                      <div className="flex flex-wrap gap-2">
+                        <span className="text-xs font-mono text-indigo-400 bg-indigo-400/10 px-2 py-1 rounded">
+                          {trend.source}
+                        </span>
+                        {trend.metric && (
+                          <span className="text-xs font-mono text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded">
+                            {trend.metric}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs text-neutral-500 whitespace-nowrap ml-2">
                         {new Date(trend.date).toLocaleDateString()}
                       </span>
                     </div>

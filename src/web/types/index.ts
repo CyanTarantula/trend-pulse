@@ -4,6 +4,8 @@ export interface Trend {
     source: string;
     url: string;
     raw_text: string;
+    score: number;
+    metric: string;
 }
 
 export interface TrendsData {
