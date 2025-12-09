@@ -52,7 +52,18 @@ Trend Pulse is a real-time social signal identifier that aggregates trending top
 - **Frontend**: Deploy `src/web` to Vercel.
 - **Automation**: The `.github/workflows/daily_update.yml` runs the Python script daily to update the Google Sheet.
 
-## Data Flow
 
-1.  `get_trends.py` fetches data -> Processes with NLP -> Pushes to Google Sheets.
-2.  Next.js App -> Fetches from Google Sheets -> Displays to user.
+## Environment Variables
+
+You must configure the following environment variables in both **Vercel** (for the frontend) and **GitHub Actions** (for the daily aggregator script).
+
+| Variable Name | Description |
+| :--- | :--- |
+| `SHEET_ID` | The ID of the Google Sheet acting as the database. |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | The full JSON content of your Google Service Account key. |
+
+### How to set them:
+
+1.  **Vercel**: Go to **Settings** > **Environment Variables**. Add both keys.
+2.  **GitHub**: Go to your Repo **Settings** > **Secrets and variables** > **Actions**. Add them as **Repository secrets**.
+
