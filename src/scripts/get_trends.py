@@ -351,42 +351,141 @@ class SheetWriter:
         except Exception as e:
             logger.error(f"Error connecting to Sheets: {repr(e)}")
 
-    def write_trends(self, trends: List[Dict[str, Any]]):
+    def sync_trends(self, trends: List[Dict[str, Any]]):
+        """
+        Syncs new trends with existing sheet data.
+        Deduplicates by Date + Trend (case-insensitive).
+        Merges 'Source' fields for duplicates.
+        """
         if not self.sheet:
             print(json.dumps(trends[:3], indent=2))
             return
 
         tabs = ["Gen Z", "Millennials", "Gen Alpha", "General"]
+
         for tab_name in tabs:
             try:
                 worksheet = self.sheet.worksheet(tab_name)
-                # clear old content properly or just append?
-                # Append is safer for history, but for "Trends of the Day" maybe we want fresh?
-                # For now, append.
             except gspread.WorksheetNotFound:
                 worksheet = self.sheet.add_worksheet(title=tab_name, rows=1000, cols=5)
                 worksheet.append_row(["Date", "Trend", "Source", "URL", "Raw Text"])
 
-            tab_trends = [t for t in trends if t.get("generation") == tab_name]
-            rows = [
-                [t["date"], t["trend"], t["source"], t["url"], t["raw_text"]]
-                for t in tab_trends
+            # 1. Read ALL existing data
+            try:
+                existing_rows = worksheet.get_all_values()
+            except Exception as e:
+                logger.error(f"Failed to read worksheet {tab_name}: {e}")
+                continue
+
+            if not existing_rows:
+                # Should at least have headers if newly created, but just in case
+                header = ["Date", "Trend", "Source", "URL", "Raw Text"]
+            else:
+                header = existing_rows[0]
+                existing_rows = existing_rows[1:]  # Skip header
+
+            # 2. Combine and Deduplicate
+            # Key: (date, normalized_trend) -> {data_dict}
+            merged_data = {}
+
+            # Helper to normalize trend
+            def normalize(t):
+                return t.lower().strip()
+
+            # Helper to merge entries
+            def merge_entry(existing, new_entry):
+                # Merge Source
+                sources = set(
+                    [s.strip() for s in existing["Source"].split(",") if s.strip()]
+                )
+                sources.add(new_entry["source"])
+                existing["Source"] = ", ".join(sorted(list(sources)))
+
+                # Keep first URL (or prefer new one if existing is empty? rarely empty)
+                if not existing["URL"] and new_entry["url"]:
+                    existing["URL"] = new_entry["url"]
+
+                return existing
+
+            # Process Existing
+            for row in existing_rows:
+                if len(row) < 5:
+                    continue  # Skip malformed
+                date, trend, source, url, raw_text = (
+                    row[0],
+                    row[1],
+                    row[2],
+                    row[3],
+                    row[4],
+                )
+                key = (date, normalize(trend))
+                merged_data[key] = {
+                    "Date": date,
+                    "Trend": trend,  # Keep original casing of first occurrence
+                    "Source": source,
+                    "URL": url,
+                    "Raw Text": raw_text,
+                }
+
+            # Process New
+            tab_new_trends = [t for t in trends if t.get("generation") == tab_name]
+            for t in tab_new_trends:
+                date = t["date"]
+                trend = t["trend"]
+                key = (date, normalize(trend))
+
+                if key in merged_data:
+                    # Merge
+                    merged_data[key] = merge_entry(merged_data[key], t)
+                else:
+                    # Add New
+                    merged_data[key] = {
+                        "Date": date,
+                        "Trend": trend,
+                        "Source": t["source"],
+                        "URL": t["url"],
+                        "Raw Text": t["raw_text"],
+                    }
+
+            # 3. Write Back
+            # Convert back to list of lists
+            # Sort by Date (descending) then Trend (A-Z)
+            final_rows = list(merged_data.values())
+            final_rows.sort(key=lambda x: (x["Date"], x["Trend"]), reverse=True)
+
+            rows_to_write = [header] + [
+                [r["Date"], r["Trend"], r["Source"], r["URL"], r["Raw Text"]]
+                for r in final_rows
             ]
 
-            if rows:
-                worksheet.append_rows(rows)
-                logger.info(f"Appended {len(rows)} rows to {tab_name}")
+            try:
+                # Clear and update
+                worksheet.clear()
+                worksheet.update(values=rows_to_write)
+                logger.info(
+                    f"Synced {tab_name}: {len(final_rows)} trends ({len(tab_new_trends)} new merged)."
+                )
+            except Exception as e:
+                logger.error(f"Failed to write to {tab_name}: {e}")
 
 
 def main():
     fetcher = TrendFetcher()
     trends = fetcher.get_all_trends()
+
+    # Debug: Log source breakdown
+    source_counts = {}
+    for t in trends:
+        s = t.get("source", "Unknown")
+        source_counts[s] = source_counts.get(s, 0) + 1
+    logger.info(f"Fetched trends breakdown: {source_counts}")
+
     classifier = TrendClassifier()
     for t in trends:
         t["generation"] = classifier.classify(t["raw_text"])
     writer = SheetWriter()
     writer.connect()
-    writer.write_trends(trends)
+    writer.sync_trends(trends)
     logger.info("Done.")
 
 
