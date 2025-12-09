@@ -1,0 +1,8 @@
+pytrends
+gspread
+oauth2client
+feedparser
+requests
+pandas
+beautifulsoup4
+sentence-transformers

@@ -1,0 +1,30 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+.env
+.env.local
+
+# Next.js
+.next/
+out/
+build/
+.vercel/
+
+# Project Specific
+src/web/.next
+src/web/out
+src/web/node_modules
+*.log
