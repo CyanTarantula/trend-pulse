@@ -166,9 +166,7 @@ class TrendFetcher:
         """Fetches daily trending searches from Google Trends RSS."""
         logger.info("Fetching Google Trends (RSS)...")
         # Try the atom feed if rss fails, or just ensure headers are good.
-        rss_url = (
-            f"https://trends.google.com/trends/trendingsearches/daily/rss?geo={geo}"
-        )
+        rss_url = f"https://trends.google.com/trending/rss?geo={geo}"
         try:
             # Use a realistic User-Agent
             headers = {
