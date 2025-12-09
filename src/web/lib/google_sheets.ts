@@ -1,7 +1,7 @@
 import { google } from 'googleapis';
 
 export async function getTrendsData() {
-    let serviceAccount = {};
+    let serviceAccount: Record<string, any> = {};
     try {
         serviceAccount = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '{}');
     } catch (e) {
