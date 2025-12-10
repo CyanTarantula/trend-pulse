@@ -1,0 +1,126 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "Trend Pulse API",
+        "version": "1.0.0",
+        "description": "API for fetching multi-generational social trends."
+    },
+    "servers": [
+        {
+            "url": "/api",
+            "description": "Main API Server"
+        }
+    ],
+    "components": {
+        "securitySchemes": {
+            "ApiKeyAuth": {
+                "type": "apiKey",
+                "in": "header",
+                "name": "x-api-key"
+            }
+        }
+    },
+    "security": [
+        {
+            "ApiKeyAuth": []
+        }
+    ],
+    "paths": {
+        "/trends": {
+            "get": {
+                "summary": "Get latest trends",
+                "description": "Returns a list of trends filtered by generation and time.",
+                "parameters": [
+                    {
+                        "name": "gen",
+                        "in": "query",
+                        "description": "Generation to filter by (Gen Z, Millennials, Gen Alpha, General)",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "Gen Z",
+                                "Millennials",
+                                "Gen Alpha",
+                                "General"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "time",
+                        "in": "query",
+                        "description": "Timeframe filter (day, week, month)",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "day",
+                                "week",
+                                "month"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "key",
+                        "in": "query",
+                        "description": "API Key (alternative to x-api-key header)",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successful response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "lastUpdated": {
+                                            "type": "string",
+                                            "format": "date-time"
+                                        },
+                                        "generations": {
+                                            "type": "object",
+                                            "additionalProperties": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "date": {
+                                                            "type": "string"
+                                                        },
+                                                        "trend": {
+                                                            "type": "string"
+                                                        },
+                                                        "source": {
+                                                            "type": "string"
+                                                        },
+                                                        "url": {
+                                                            "type": "string"
+                                                        },
+                                                        "score": {
+                                                            "type": "integer"
+                                                        },
+                                                        "metric": {
+                                                            "type": "string"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized - Invalid or missing API key"
+                    }
+                }
+            }
+        }
+    }
+}
